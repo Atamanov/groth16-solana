@@ -335,6 +335,131 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
     }
 }
 
+/// Borrowed prepared-blob references for one verifying key, in canonical
+/// registry order. The slices come from a consumer-owned registry account
+/// the caller has already authenticated by address; nothing here re-checks
+/// provenance, and a wrong blob can only fail the caller's own proof.
+#[cfg(feature = "vk-registry")]
+pub struct PreparedVkRefs<'a> {
+    pub beta: &'a [u8],
+    pub gamma: &'a [u8],
+    pub delta: &'a [u8],
+    /// BSB22 `(g2, g_sigma_neg_g2)` blobs, present iff the vk has a
+    /// commitment key.
+    pub commitment: Option<(&'a [u8], &'a [u8])>,
+    /// Cached canonical `e(alpha, beta)` from `vk_registry::pairing_map`.
+    /// When present the main check drops the alpha-beta pair entirely.
+    pub gt_target: Option<&'a [u8; crate::vk_registry::GT_BYTES]>,
+}
+
+#[cfg(feature = "vk-registry")]
+impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
+    /// Registry-backed verification via `sol_alt_bn128_pairing_check_prepared`.
+    /// Checks public inputs against the field size, like [`Self::verify`].
+    pub fn verify_prepared(&mut self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
+        self.verify_prepared_common::<true>(refs)
+    }
+
+    fn verify_prepared_common<const CHECK: bool>(
+        &mut self,
+        refs: &PreparedVkRefs,
+    ) -> Result<(), Groth16Error> {
+        use crate::vk_registry::{G1G2Pair, G1PreparedPair, pairing_check_prepared};
+
+        self.prepare_inputs::<CHECK>()?;
+        let verdict = match refs.gt_target {
+            // `proof_a` arrives negated (-A). The target form flips every
+            // sign instead: e(A,B) e(-L,gamma) e(-C,delta) == e(alpha,beta).
+            Some(target) => {
+                let full = [G1G2Pair {
+                    g1: negate_g1_be(self.proof_a),
+                    g2: *self.proof_b,
+                }];
+                let prepared = [
+                    G1PreparedPair::new(negate_g1_be(&self.prepared_public_inputs), refs.gamma),
+                    G1PreparedPair::new(negate_g1_be(self.proof_c), refs.delta),
+                ];
+                pairing_check_prepared(&full, &prepared, Some(target))?
+            }
+            // Identity form, byte-identical operands to `verify_common`'s
+            // 4-pair input with beta/gamma/delta resolved from blobs.
+            None => {
+                let full = [G1G2Pair {
+                    g1: *self.proof_a,
+                    g2: *self.proof_b,
+                }];
+                let prepared = [
+                    G1PreparedPair::new(self.prepared_public_inputs, refs.gamma),
+                    G1PreparedPair::new(*self.proof_c, refs.delta),
+                    G1PreparedPair::new(self.verifyingkey.vk_alpha_g1, refs.beta),
+                ];
+                pairing_check_prepared(&full, &prepared, None)?
+            }
+        };
+        if !verdict {
+            return Err(Groth16Error::ProofVerificationFailed);
+        }
+        self.verify_commitment_pok_prepared(refs)
+    }
+
+    /// The documented second variant: map the mixed product to its 384-byte
+    /// encoding and compare in-program. Requires a cached target; otherwise
+    /// behaves exactly like the target form of [`Self::verify_prepared`].
+    pub fn verify_prepared_via_map(&mut self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
+        use crate::vk_registry::{G1G2Pair, G1PreparedPair, pairing_map_prepared};
+
+        let target = refs
+            .gt_target
+            .ok_or(Groth16Error::VkRegistrySyscallFailed)?;
+        self.prepare_inputs::<true>()?;
+        let full = [G1G2Pair {
+            g1: negate_g1_be(self.proof_a),
+            g2: *self.proof_b,
+        }];
+        let prepared = [
+            G1PreparedPair::new(negate_g1_be(&self.prepared_public_inputs), refs.gamma),
+            G1PreparedPair::new(negate_g1_be(self.proof_c), refs.delta),
+        ];
+        let mapped = pairing_map_prepared(&full, &prepared)?;
+        if mapped != *target {
+            return Err(Groth16Error::ProofVerificationFailed);
+        }
+        self.verify_commitment_pok_prepared(refs)
+    }
+
+    /// Prepared-operand form of the BSB22 PoK check:
+    /// `e(commitment, gSigmaNeg) * e(pok, g) == 1` as a separate 2-pair
+    /// call. Never folded into the main product: two independent ==1 checks
+    /// are not equivalent to one product check without randomization.
+    #[cfg(feature = "bsb22")]
+    fn verify_commitment_pok_prepared(&self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
+        use crate::vk_registry::{G1PreparedPair, pairing_check_prepared};
+
+        match (self.proof_commitment, self.proof_commitment_pok, refs.commitment) {
+            (Some(commitment), Some(pok), Some((g2_blob, sigma_neg_blob))) => {
+                let prepared = [
+                    G1PreparedPair::new(*commitment, sigma_neg_blob),
+                    G1PreparedPair::new(*pok, g2_blob),
+                ];
+                if !pairing_check_prepared(&[], &prepared, None)? {
+                    return Err(Groth16Error::CommitmentPokVerificationFailed);
+                }
+                Ok(())
+            }
+            (None, None, None) => Ok(()),
+            _ => Err(Groth16Error::Bsb22InconsistentCommitmentState),
+        }
+    }
+
+    #[cfg(not(feature = "bsb22"))]
+    fn verify_commitment_pok_prepared(&self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
+        if refs.commitment.is_some() {
+            return Err(Groth16Error::UnexpectedCommitmentKey);
+        }
+        Ok(())
+    }
+}
+
 /// BN254 scalar field (Fr) modulus as 32 big-endian bytes:
 /// 21888242871839275222246405745257275088548364400416034343698204186575808495617
 /// = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001.

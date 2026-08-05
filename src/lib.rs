@@ -69,6 +69,8 @@ pub mod decompression;
 pub mod errors;
 pub mod groth16;
 pub(crate) mod syscalls;
+#[cfg(feature = "vk-registry")]
+pub mod vk_registry;
 
 #[cfg(feature = "circom")]
 pub mod proof_parser;

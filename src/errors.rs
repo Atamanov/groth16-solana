@@ -71,6 +71,15 @@ pub enum Groth16Error {
     #[cfg(feature = "bsb22")]
     #[error("Bsb22InconsistentCommitmentState")]
     Bsb22InconsistentCommitmentState,
+    /// A prepared-operand syscall rejected the call or its inputs.
+    #[cfg(feature = "vk-registry")]
+    #[error("VkRegistrySyscallFailed")]
+    VkRegistrySyscallFailed,
+    /// The prepared-operand syscalls exist only on the Solana target;
+    /// host builds must route through the fork's litesvm harness.
+    #[cfg(feature = "vk-registry")]
+    #[error("VkRegistryUnsupportedHost")]
+    VkRegistryUnsupportedHost,
 }
 
 #[cfg(feature = "circom")]
@@ -116,6 +125,10 @@ impl From<Groth16Error> for u32 {
             Groth16Error::Bsb22InvalidCommitmentPoint => 20,
             #[cfg(feature = "bsb22")]
             Groth16Error::Bsb22InconsistentCommitmentState => 21,
+            #[cfg(feature = "vk-registry")]
+            Groth16Error::VkRegistrySyscallFailed => 22,
+            #[cfg(feature = "vk-registry")]
+            Groth16Error::VkRegistryUnsupportedHost => 23,
         }
     }
 }

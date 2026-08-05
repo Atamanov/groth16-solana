@@ -1467,6 +1467,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "solana-bn254 3.2.1",
+ "solana-define-syscall 4.0.1",
  "thiserror 2.0.18",
 ]
 
