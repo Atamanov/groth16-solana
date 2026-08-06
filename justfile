@@ -119,6 +119,7 @@ nostd_check := "cargo +nightly check -p groth16-solana --target ci/solana-nostd.
 check-nostd:
     {{ nostd_check }}
     {{ nostd_check }} --features bsb22
+    {{ nostd_check }} --features "bsb22 vk-registry"
 
 # Compile groth16-solana with no features, each feature alone, and all features
 check-features:
@@ -128,6 +129,8 @@ check-features:
     cargo check -p groth16-solana --features circom
     cargo check -p groth16-solana --features bsb22
     cargo check -p groth16-solana --features bsb22-test
+    cargo check -p groth16-solana --features vk-registry
+    cargo check -p groth16-solana --features "bsb22 vk-registry"
     cargo check -p groth16-solana --all-features
 
 # === README generation (cargo-rdme) ===

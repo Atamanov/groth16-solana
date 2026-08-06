@@ -364,7 +364,7 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
         &mut self,
         refs: &PreparedVkRefs,
     ) -> Result<(), Groth16Error> {
-        use crate::vk_registry::{G1G2Pair, G1PreparedPair, pairing_check_prepared};
+        use crate::vk_registry::{pairing_check_prepared, G1G2Pair, G1PreparedPair};
 
         self.prepare_inputs::<CHECK>()?;
         let verdict = match refs.gt_target {
@@ -406,7 +406,7 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
     /// encoding and compare in-program. Requires a cached target; otherwise
     /// behaves exactly like the target form of [`Self::verify_prepared`].
     pub fn verify_prepared_via_map(&mut self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
-        use crate::vk_registry::{G1G2Pair, G1PreparedPair, pairing_map_prepared};
+        use crate::vk_registry::{pairing_map_prepared, G1G2Pair, G1PreparedPair};
 
         let target = refs
             .gt_target
@@ -433,9 +433,13 @@ impl<const NR_INPUTS: usize> Groth16Verifier<'_, NR_INPUTS> {
     /// are not equivalent to one product check without randomization.
     #[cfg(feature = "bsb22")]
     fn verify_commitment_pok_prepared(&self, refs: &PreparedVkRefs) -> Result<(), Groth16Error> {
-        use crate::vk_registry::{G1PreparedPair, pairing_check_prepared};
+        use crate::vk_registry::{pairing_check_prepared, G1PreparedPair};
 
-        match (self.proof_commitment, self.proof_commitment_pok, refs.commitment) {
+        match (
+            self.proof_commitment,
+            self.proof_commitment_pok,
+            refs.commitment,
+        ) {
             (Some(commitment), Some(pok), Some((g2_blob, sigma_neg_blob))) => {
                 let prepared = [
                     G1PreparedPair::new(*commitment, sigma_neg_blob),

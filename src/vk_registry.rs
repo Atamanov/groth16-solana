@@ -93,11 +93,7 @@ mod inner {
             return Err(Groth16Error::VkRegistrySyscallFailed);
         }
         let rc = unsafe {
-            sol_alt_bn128_g2_prepare(
-                pack_g2_prepare_shape(),
-                source.as_ptr(),
-                out.as_mut_ptr(),
-            )
+            sol_alt_bn128_g2_prepare(pack_g2_prepare_shape(), source.as_ptr(), out.as_mut_ptr())
         };
         if rc != 0 {
             return Err(Groth16Error::VkRegistrySyscallFailed);
@@ -195,12 +191,7 @@ mod inner {
             prepared.as_ptr().cast()
         };
         let rc = unsafe {
-            sol_alt_bn128_pairing_map_prepared(
-                shape,
-                full_addr,
-                prepared_addr,
-                result.as_mut_ptr(),
-            )
+            sol_alt_bn128_pairing_map_prepared(shape, full_addr, prepared_addr, result.as_mut_ptr())
         };
         if rc != 0 {
             return Err(Groth16Error::VkRegistrySyscallFailed);
@@ -248,10 +239,7 @@ mod tests {
     #[test]
     fn shape_packing_is_pinned() {
         assert_eq!(pack_g2_prepare_shape(), 1 << 48);
-        assert_eq!(
-            pack_prepared_pairing_shape(5, 3),
-            5 | (3 << 16) | (1 << 48)
-        );
+        assert_eq!(pack_prepared_pairing_shape(5, 3), 5 | (3 << 16) | (1 << 48));
         assert_eq!(PREPARED_BLOB_HEADER, [66, 80, 71, 50, 1, 1, 5, 0]);
     }
 
